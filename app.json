@@ -5,11 +5,6 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1a1a2e"
-    },
     "updates": {
       "fallbackToCacheTimeout": 0
     },
@@ -17,7 +12,7 @@
       "**/*"
     ],
     "ios": {
-      "supportsTabletMode": true
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
@@ -25,10 +20,12 @@
         "backgroundColor": "#1a1a2e"
       },
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
-      ]
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.sekkyn.workshopvehiclemanagement"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -41,6 +38,11 @@
           "cameraPermission": "The app needs camera access for vehicle inspection photos"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "634b5c4a-c336-4daf-8f78-7f04c2b65512"
+      }
+    }
   }
 }
