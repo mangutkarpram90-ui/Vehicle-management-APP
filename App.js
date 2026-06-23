@@ -15,6 +15,7 @@ import * as FileSystem from 'expo-file-system';
 const STORAGE_KEY    = 'SEK_VB_complaints';
 const USERS_KEY      = 'SEK_VB_users';
 const SETTINGS_KEY   = 'SEK_VB_settings';
+const REPORTS_KEY    = 'SEK_VB_saved_reports';
 const MAX_COMPLAINTS = 100;
 
 // ── NOTIFICATION SETUP ─────────────────────────────────────────────────────────
@@ -74,6 +75,12 @@ const T = {
     storedOf: ' / ', stored: ' stored',
     completeLabel: 'Complete', pendingLabel: 'Pending', reopenLabel: 'Re-opened',
     pdfError: 'PDF Error', printError: 'Print Error',
+    saveReport: '💾 Save Report', reportSaved: 'Report Saved!',
+    savedReports: '📁 Saved Reports', noSavedReports: 'No saved reports yet',
+    exportAllPDF: '📄 Export All as PDF', exportCSV: '📊 Export as CSV/Excel',
+    deleteReport: 'Delete Report', deleteReportQ: 'Delete this saved report?',
+    reportsList: 'Reports List', exportingPDF: 'Generating PDF...',
+    allReports: 'All Reports', viewReport: 'View',
   },
   mr: {
     appName: 'SEK_VB', appSub: 'वाहन तपासणी प्रणाली',
@@ -121,6 +128,12 @@ const T = {
     storedOf: ' / ', stored: ' जतन',
     completeLabel: 'पूर्ण', pendingLabel: 'प्रलंबित', reopenLabel: 'पुन्हा उघडले',
     pdfError: 'PDF त्रुटी', printError: 'प्रिंट त्रुटी',
+    saveReport: '💾 रिपोर्ट जतन करा', reportSaved: 'रिपोर्ट जतन झाला!',
+    savedReports: '📁 जतन केलेले रिपोर्ट', noSavedReports: 'अजून कोणताही रिपोर्ट जतन केला नाही',
+    exportAllPDF: '📄 सर्व PDF मध्ये निर्यात करा', exportCSV: '📊 CSV/Excel मध्ये निर्यात करा',
+    deleteReport: 'रिपोर्ट हटवा', deleteReportQ: 'हा जतन केलेला रिपोर्ट हटवायचा का?',
+    reportsList: 'रिपोर्ट यादी', exportingPDF: 'PDF तयार होत आहे...',
+    allReports: 'सर्व रिपोर्ट', viewReport: 'पहा',
   },
 };
 
@@ -167,6 +180,14 @@ async function loadSettings() {
 }
 async function saveSettings(s) {
   try { await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {}
+}
+async function loadSavedReports() {
+  try { const r = await AsyncStorage.getItem(REPORTS_KEY); return r ? JSON.parse(r) : []; }
+  catch { return []; }
+}
+async function saveSavedReports(list) {
+  try { await AsyncStorage.setItem(REPORTS_KEY, JSON.stringify(list)); return list; }
+  catch { return list; }
 }
 
 // ── THEME ──────────────────────────────────────────────────────────────────────
@@ -244,7 +265,7 @@ function LoginScreen({ onLogin, settings }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // ADMIN SCREEN
 // ══════════════════════════════════════════════════════════════════════════════
-function AdminScreen({ user, onLogout, complaints, onComplaintAction, settings, onSettingsChange }) {
+function AdminScreen({ user, onLogout, complaints, onComplaintAction, settings, onSettingsChange, savedReports, onDeleteSavedReport }) {
   const [tab, setTab]             = useState('dashboard');
   const [users, setUsers]         = useState([]);
   const [showAddUser, setShowAdd] = useState(false);
@@ -334,6 +355,7 @@ function AdminScreen({ user, onLogout, complaints, onComplaintAction, settings, 
     { key:'dashboard', label: t.dashboard },
     { key:'users',     label: t.users },
     { key:'complaints',label: t.complaints },
+    { key:'reports',   label: '📁 Reports' },
     { key:'settings',  label: t.settings },
   ];
 
@@ -558,6 +580,12 @@ function AdminScreen({ user, onLogout, complaints, onComplaintAction, settings, 
           </View>
         )}
 
+        {/* ── REPORTS ── */}
+        {tab === 'reports' && (
+          <AdminReportsView savedReports={savedReports} settings={settings} th={th} t={t}
+            onDeleteReport={onDeleteSavedReport}/>
+        )}
+
         {/* ── SETTINGS ── */}
         {tab === 'settings' && (
           <View>
@@ -736,7 +764,7 @@ function StaffScreen({ user, onLogout, complaints, onComplaintAction, settings }
 // ══════════════════════════════════════════════════════════════════════════════
 // INSPECTION FORM
 // ══════════════════════════════════════════════════════════════════════════════
-function InspectionScreen({ user, onLogout, onReport, complaints, settings }) {
+function InspectionScreen({ user, onLogout, onReport, complaints, settings, onOpenSavedReports, savedReportsCount }) {
   const [vehicleNo,   setVehicleNo]   = useState('');
   const [ownerName,   setOwnerName]   = useState('');
   const [vehicleType, setVehicleType] = useState('Car');
@@ -809,9 +837,15 @@ function InspectionScreen({ user, onLogout, onReport, complaints, settings }) {
             <Text style={styles.headerSub}>{t.newInspection}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
-          <Text style={styles.logoutText}>{t.logout}</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection:'row', gap:6 }}>
+          <TouchableOpacity style={[styles.logoutBtn, { backgroundColor:'rgba(46,160,120,0.25)', borderColor:'rgba(46,160,120,0.4)' }]}
+            onPress={onOpenSavedReports}>
+            <Text style={{ color:'#2ea878', fontSize:12, fontWeight:'700' }}>📁 {savedReportsCount || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
+            <Text style={styles.logoutText}>{t.logout}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={{ flex:1, padding:14 }} showsVerticalScrollIndicator={false}>
@@ -911,6 +945,36 @@ function InspectionScreen({ user, onLogout, onReport, complaints, settings }) {
         <TouchableOpacity style={styles.btn} onPress={handleNext}>
           <Text style={styles.btnText}>📄 {t.generateReport}</Text>
         </TouchableOpacity>
+
+        {/* ── LAST 30 RECORDS ── */}
+        {complaints.length > 0 && (
+          <View style={{ marginTop:20 }}>
+            <Text style={styles.sectionTitle}>🕐 Recent Records ({Math.min(complaints.length, 30)})</Text>
+            {[...complaints].reverse().slice(0, 30).map(c => {
+              const statusColors = {
+                'Complete':  { bg:'#d4edda', text:'#155724' },
+                'Pending':   { bg:'#fff3cd', text:'#856404' },
+                'Re-opened': { bg:'#cce5ff', text:'#004085' },
+              };
+              const sc = statusColors[c.status] || statusColors['Pending'];
+              const statusLabel = c.status === 'Complete' ? t.completeLabel : c.status === 'Re-opened' ? t.reopenLabel : t.pendingLabel;
+              return (
+                <View key={c.id} style={[styles.card, { backgroundColor: th.card, marginBottom:8, padding:12 }]}>
+                  <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+                    <Text style={{ fontWeight:'800', fontSize:14, color: th.accent }}>#{c.id} — {c.vehicleNo}</Text>
+                    <View style={[styles.badge, { backgroundColor: sc.bg }]}>
+                      <Text style={{ fontSize:10, fontWeight:'700', color: sc.text }}>{statusLabel}</Text>
+                    </View>
+                  </View>
+                  <Text style={{ fontSize:12, color: th.sub }}>👤 {c.ownerName} · 🚘 {c.vehicleType}</Text>
+                  <Text style={{ fontSize:11, color: th.sub, marginTop:2 }}>🕐 {c.datetime}</Text>
+                  <Text style={{ fontSize:12, color: th.text, marginTop:3 }} numberOfLines={2}>🔧 {c.problem}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         <View style={{ height:30 }}/>
       </ScrollView>
     </SafeAreaView>
@@ -920,10 +984,26 @@ function InspectionScreen({ user, onLogout, onReport, complaints, settings }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // REPORT SCREEN
 // ══════════════════════════════════════════════════════════════════════════════
-function ReportScreen({ user, record, onBack, onNew, settings }) {
-  const [loading, setLoading] = useState(false);
+function ReportScreen({ user, record, onBack, onNew, settings, onSaveReport, savedReports, onOpenSavedReports, isViewMode }) {
+  const [loading,    setLoading]    = useState(false);
+  const [isSaved,    setIsSaved]    = useState(false);
   const t = T[settings.lang];
   const th = makeTheme(settings.darkMode);
+
+  // Check if this report is already saved
+  useEffect(() => {
+    if (savedReports && record) {
+      const alreadySaved = savedReports.some(r => r.id === record.id);
+      setIsSaved(alreadySaved);
+    }
+  }, [savedReports, record]);
+
+  async function handleSave() {
+    if (!onSaveReport || isSaved) return;
+    const count = await onSaveReport(record, user);
+    setIsSaved(true);
+    Alert.alert('✓', t.reportSaved + '\n' + t.savedReports + ': ' + count);
+  }
 
   async function exportPDF() {
     setLoading(true);
@@ -944,9 +1024,14 @@ function ReportScreen({ user, record, onBack, onNew, settings }) {
     <SafeAreaView style={{ flex:1, backgroundColor: th.bg }}>
       <View style={[styles.header, { backgroundColor: th.header }]}>
         <TouchableOpacity onPress={onBack}><Text style={{ color:'#fff', fontSize:15 }}>{t.back}</Text></TouchableOpacity>
-        <Text style={styles.headerTitle}>{t.reportPreview}</Text>
-        <View style={{ width:50 }}/>
+        <Text style={styles.headerTitle}>{isViewMode ? t.savedReports : t.reportPreview}</Text>
+        {!isViewMode && onOpenSavedReports ? (
+          <TouchableOpacity onPress={onOpenSavedReports}>
+            <Text style={{ color:'#2ea878', fontSize:12, fontWeight:'700' }}>📁 {savedReports?.length || 0}</Text>
+          </TouchableOpacity>
+        ) : <View style={{ width:50 }}/>}
       </View>
+
       <ScrollView style={{ flex:1, padding:14 }} showsVerticalScrollIndicator={false}>
         <View style={{ backgroundColor:'#d4edda', borderRadius:20, alignSelf:'flex-start',
           paddingHorizontal:14, paddingVertical:6, marginBottom:14 }}>
@@ -992,16 +1077,345 @@ function ReportScreen({ user, record, onBack, onNew, settings }) {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.btn} onPress={exportPDF} disabled={loading}>
+        {/* SAVE REPORT BUTTON */}
+        {!isViewMode && onSaveReport && (
+          <TouchableOpacity
+            style={[styles.btn, { backgroundColor: isSaved ? '#2a9d8f' : '#e63946', marginBottom:10 }]}
+            onPress={handleSave} disabled={isSaved}>
+            <Text style={styles.btnText}>{isSaved ? '✅ ' + t.reportSaved : t.saveReport}</Text>
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity style={[styles.btn, { backgroundColor:'#1a1a2e' }]} onPress={exportPDF} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff"/> : <Text style={styles.btnText}>📄 {t.savePDF}</Text>}
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.btn, { backgroundColor:'#1a1a2e', marginTop:10 }]} onPress={printDirect}>
+        <TouchableOpacity style={[styles.btn, { backgroundColor:'#457b9d', marginTop:10 }]} onPress={printDirect}>
           <Text style={styles.btnText}>🖨️ {t.print}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.btn, { backgroundColor:'#fff', borderWidth:2,
-          borderColor: th.accent, marginTop:10 }]} onPress={onNew}>
-          <Text style={[styles.btnText, { color: th.accent }]}>{t.newInsp}</Text>
+        {!isViewMode && (
+          <TouchableOpacity style={[styles.btn, { backgroundColor:'#fff', borderWidth:2,
+            borderColor: th.accent, marginTop:10 }]} onPress={onNew}>
+            <Text style={[styles.btnText, { color: th.accent }]}>{t.newInsp}</Text>
+          </TouchableOpacity>
+        )}
+        <View style={{ height:30 }}/>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ADMIN REPORTS VIEW (inline tab for Admin)
+// ══════════════════════════════════════════════════════════════════════════════
+function AdminReportsView({ savedReports, settings, th, t, onDeleteReport }) {
+  const [search, setSearch]   = useState('');
+  const [filter, setFilter]   = useState('All');
+  const [loading, setLoading] = useState(false);
+  const [loadCSV, setLoadCSV] = useState(false);
+
+  const filtered = (savedReports || []).filter(r => {
+    const q = search.toLowerCase();
+    const ms = !q || r.vehicleNo.toLowerCase().includes(q) || r.ownerName.toLowerCase().includes(q) || (r.inspector||'').toLowerCase().includes(q);
+    const mf = filter === 'All' || r.status === filter;
+    return ms && mf;
+  });
+
+  async function exportAllPDF() {
+    if (!savedReports || savedReports.length === 0) return;
+    setLoading(true);
+    try {
+      const pages = savedReports.map(rec => buildHTML(rec, { name: rec.savedBy || rec.inspector || '', role: rec.savedByRole || '' })).join('<div style="page-break-after:always"></div>');
+      const { uri } = await Print.printToFileAsync({ html: '<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body>' + pages + '</body></html>' });
+      await Sharing.shareAsync(uri, { mimeType:'application/pdf', dialogTitle: t.exportAllPDF });
+    } catch(e) { Alert.alert(t.pdfError, e.message); }
+    finally { setLoading(false); }
+  }
+
+  async function exportCSV() {
+    if (!savedReports || savedReports.length === 0) return;
+    setLoadCSV(true);
+    try {
+      const headers = ['ID','Vehicle No','Owner Name','Vehicle Type','Problem','Status','Inspector','Supervisor','Technician','Date Time','Saved At'];
+      const rows = savedReports.map(r => [
+        r.id,
+        '"' + (r.vehicleNo  ||'').replace(/"/g,'""') + '"',
+        '"' + (r.ownerName  ||'').replace(/"/g,'""') + '"',
+        '"' + (r.vehicleType||'').replace(/"/g,'""') + '"',
+        '"' + (r.problem    ||'').replace(/"/g,'""') + '"',
+        r.status||'Pending',
+        '"' + (r.inspector  ||r.savedBy||'').replace(/"/g,'""') + '"',
+        '"' + (r.supervisor ||'').replace(/"/g,'""') + '"',
+        '"' + (r.technician ||'').replace(/"/g,'""') + '"',
+        '"' + (r.datetime   ||'').replace(/"/g,'""') + '"',
+        '"' + (r.savedAt    ||'').replace(/"/g,'""') + '"',
+      ].join(','));
+      const csv = headers.join(',') + '\n' + rows.join('\n');
+      const path = FileSystem.documentDirectory + 'sekvb_reports_' + Date.now() + '.csv';
+      await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
+      await Sharing.shareAsync(path, { mimeType:'text/csv', dialogTitle: t.exportCSV });
+    } catch(e) { Alert.alert('CSV Error', e.message); }
+    finally { setLoadCSV(false); }
+  }
+
+  const statusColors = { 'Complete':{ bg:'#d4edda',text:'#155724' }, 'Pending':{ bg:'#fff3cd',text:'#856404' }, 'Re-opened':{ bg:'#cce5ff',text:'#004085' } };
+
+  return (
+    <View>
+      {/* Stats row */}
+      <View style={{ flexDirection:'row', gap:8, marginBottom:12 }}>
+        <View style={[styles.statCard, { backgroundColor:'#1a1a2e', flex:1 }]}>
+          <Text style={styles.statNum}>{(savedReports||[]).length}</Text>
+          <Text style={styles.statLabel}>{t.total} Reports</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor:'#2a9d8f', flex:1 }]}>
+          <Text style={styles.statNum}>{(savedReports||[]).filter(r=>r.status==='Complete').length}</Text>
+          <Text style={styles.statLabel}>{t.complete}</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor:'#e63946', flex:1 }]}>
+          <Text style={styles.statNum}>{(savedReports||[]).filter(r=>r.status==='Pending').length}</Text>
+          <Text style={styles.statLabel}>{t.pending}</Text>
+        </View>
+      </View>
+
+      {/* Export buttons */}
+      <View style={{ flexDirection:'row', gap:8, marginBottom:12 }}>
+        <TouchableOpacity style={[styles.btn, { flex:1, backgroundColor:'#e63946' }]} onPress={exportAllPDF} disabled={loading}>
+          {loading ? <ActivityIndicator color="#fff" size="small"/> : <Text style={[styles.btnText,{fontSize:12}]}>{t.exportAllPDF}</Text>}
         </TouchableOpacity>
+        <TouchableOpacity style={[styles.btn, { flex:1, backgroundColor:'#2a9d8f' }]} onPress={exportCSV} disabled={loadCSV}>
+          {loadCSV ? <ActivityIndicator color="#fff" size="small"/> : <Text style={[styles.btnText,{fontSize:12}]}>{t.exportCSV}</Text>}
+        </TouchableOpacity>
+      </View>
+
+      {/* Search */}
+      <TextInput style={[styles.input, { backgroundColor: th.card, borderColor: th.border, color: th.text, marginBottom:8 }]}
+        placeholder={t.searchPh} placeholderTextColor="#aaa" value={search} onChangeText={setSearch}/>
+
+      {/* Filter */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom:10 }}>
+        {['All','Pending','Complete','Re-opened'].map(f => (
+          <TouchableOpacity key={f} style={[styles.chip, filter===f && styles.chipActive, { marginRight:8 }]} onPress={() => setFilter(f)}>
+            <Text style={[styles.chipText, filter===f && { color:'#fff' }]}>{f}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      <Text style={{ color: th.sub, fontSize:12, marginBottom:10, textAlign:'center', fontWeight:'600' }}>
+        {filtered.length} / {(savedReports||[]).length} {t.allReports}
+      </Text>
+
+      {filtered.length === 0 && (
+        <View style={[styles.card, { backgroundColor: th.card, alignItems:'center', padding:30 }]}>
+          <Text style={{ fontSize:40 }}>📁</Text>
+          <Text style={{ color: th.sub, marginTop:8 }}>{(savedReports||[]).length===0 ? t.noSavedReports : t.noComplaints}</Text>
+        </View>
+      )}
+
+      {[...filtered].reverse().map((rep, idx) => {
+        const sc = statusColors[rep.status] || statusColors['Pending'];
+        const statusLabel = rep.status==='Complete' ? t.completeLabel : rep.status==='Re-opened' ? t.reopenLabel : t.pendingLabel;
+        return (
+          <View key={rep.id+'_'+idx} style={[styles.card, { backgroundColor: th.card, marginBottom:10 }]}>
+            <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+              <Text style={{ fontWeight:'800', fontSize:15, color: th.accent }}>#{rep.id} — {rep.vehicleNo}</Text>
+              <View style={[styles.badge, { backgroundColor: sc.bg }]}>
+                <Text style={{ fontSize:10, fontWeight:'700', color: sc.text }}>{statusLabel}</Text>
+              </View>
+            </View>
+            <Text style={{ fontSize:13, color: th.text, fontWeight:'600' }}>👤 {rep.ownerName}</Text>
+            <Text style={{ fontSize:12, color: th.sub, marginTop:2 }}>🚘 {rep.vehicleType} · 🔍 {rep.inspector||rep.savedBy||''}</Text>
+            {rep.supervisor && <Text style={{ fontSize:12, color: th.sub }}>👷 {rep.supervisor}</Text>}
+            {rep.technician && <Text style={{ fontSize:12, color: th.sub }}>🔧 {rep.technician}</Text>}
+            <Text style={{ fontSize:11, color: th.sub, marginTop:3 }}>🕐 {rep.datetime}</Text>
+            <Text style={{ fontSize:12, color: th.text, marginTop:4 }} numberOfLines={2}>📝 {rep.problem}</Text>
+            {onDeleteReport && (
+              <TouchableOpacity style={[styles.smallBtn, { backgroundColor: th.accent, marginTop:8, alignSelf:'flex-start' }]}
+                onPress={() => Alert.alert(t.deleteReport, t.deleteReportQ, [
+                  { text: t.cancel, style:'cancel' },
+                  { text: t.delete, style:'destructive', onPress: () => onDeleteReport(rep.id) },
+                ])}>
+                <Text style={styles.smallBtnText}>🗑️ {t.delete}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SAVED REPORTS SCREEN
+// ══════════════════════════════════════════════════════════════════════════════
+function SavedReportsScreen({ user, savedReports, settings, onBack, onDeleteReport, onViewReport }) {
+  const [search,      setSearch]      = useState('');
+  const [filter,      setFilter]      = useState('All');
+  const [loading,     setLoading]     = useState(false);
+  const [loadingCSV,  setLoadingCSV]  = useState(false);
+  const t  = T[settings.lang];
+  const th = makeTheme(settings.darkMode);
+
+  const filtered = savedReports.filter(r => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || r.vehicleNo.toLowerCase().includes(q) || r.ownerName.toLowerCase().includes(q) || (r.inspector||'').toLowerCase().includes(q);
+    const matchFilter = filter === 'All' || r.status === filter;
+    return matchSearch && matchFilter;
+  });
+
+  // ── Export ALL as single multi-page PDF ──
+  async function exportAllPDF() {
+    if (savedReports.length === 0) return;
+    setLoading(true);
+    try {
+      const pages = savedReports.map(rec => buildHTML(rec, { name: rec.savedBy || rec.inspector || '', role: rec.savedByRole || '' })).join('<div style="page-break-after:always"></div>');
+      const fullHTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body>' + pages + '</body></html>';
+      const { uri } = await Print.printToFileAsync({ html: fullHTML });
+      await Sharing.shareAsync(uri, { mimeType:'application/pdf', dialogTitle: t.exportAllPDF });
+    } catch(e) { Alert.alert(t.pdfError, e.message); }
+    finally { setLoading(false); }
+  }
+
+  // ── Export as CSV ──
+  async function exportCSV() {
+    if (savedReports.length === 0) return;
+    setLoadingCSV(true);
+    try {
+      const headers = ['ID','Vehicle No','Owner Name','Vehicle Type','Problem','Status','Inspector','Supervisor','Technician','Date Time','Saved At'];
+      const rows = savedReports.map(r => [
+        r.id,
+        '"' + (r.vehicleNo  || '').replace(/"/g,'""') + '"',
+        '"' + (r.ownerName  || '').replace(/"/g,'""') + '"',
+        '"' + (r.vehicleType|| '').replace(/"/g,'""') + '"',
+        '"' + (r.problem    || '').replace(/"/g,'""') + '"',
+        r.status || 'Pending',
+        '"' + (r.inspector  || r.savedBy || '').replace(/"/g,'""') + '"',
+        '"' + (r.supervisor || '').replace(/"/g,'""') + '"',
+        '"' + (r.technician || '').replace(/"/g,'""') + '"',
+        '"' + (r.datetime   || '').replace(/"/g,'""') + '"',
+        '"' + (r.savedAt    || '').replace(/"/g,'""') + '"',
+      ].join(','));
+      const csv = headers.join(',') + '\n' + rows.join('\n');
+      const path = FileSystem.documentDirectory + 'sekvb_reports_' + Date.now() + '.csv';
+      await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
+      await Sharing.shareAsync(path, { mimeType:'text/csv', dialogTitle: t.exportCSV });
+    } catch(e) { Alert.alert('CSV Error', e.message); }
+    finally { setLoadingCSV(false); }
+  }
+
+  function confirmDelete(rep) {
+    Alert.alert(t.deleteReport, t.deleteReportQ, [
+      { text: t.cancel, style:'cancel' },
+      { text: t.delete, style:'destructive', onPress: () => onDeleteReport(rep.id) },
+    ]);
+  }
+
+  const statusColors = {
+    'Complete':  { bg:'#d4edda', text:'#155724' },
+    'Pending':   { bg:'#fff3cd', text:'#856404' },
+    'Re-opened': { bg:'#cce5ff', text:'#004085' },
+  };
+
+  return (
+    <SafeAreaView style={{ flex:1, backgroundColor: th.bg }}>
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: th.header }]}>
+        <TouchableOpacity onPress={onBack}>
+          <Text style={{ color:'#fff', fontSize:15 }}>{t.back}</Text>
+        </TouchableOpacity>
+        <View style={{ alignItems:'center' }}>
+          <Text style={styles.headerTitle}>{t.savedReports}</Text>
+          <Text style={{ color:'#8888aa', fontSize:11 }}>{savedReports.length} {t.allReports}</Text>
+        </View>
+        <View style={{ width:50 }}/>
+      </View>
+
+      {/* Export buttons */}
+      <View style={{ flexDirection:'row', gap:8, padding:12, paddingBottom:4, backgroundColor: th.header }}>
+        <TouchableOpacity
+          style={{ flex:1, backgroundColor:'#e63946', borderRadius:10, padding:10, alignItems:'center' }}
+          onPress={exportAllPDF} disabled={loading || savedReports.length === 0}>
+          {loading
+            ? <ActivityIndicator color="#fff" size="small"/>
+            : <Text style={{ color:'#fff', fontWeight:'800', fontSize:12 }}>{t.exportAllPDF}</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{ flex:1, backgroundColor:'#2a9d8f', borderRadius:10, padding:10, alignItems:'center' }}
+          onPress={exportCSV} disabled={loadingCSV || savedReports.length === 0}>
+          {loadingCSV
+            ? <ActivityIndicator color="#fff" size="small"/>
+            : <Text style={{ color:'#fff', fontWeight:'800', fontSize:12 }}>{t.exportCSV}</Text>}
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={{ flex:1, padding:12 }} showsVerticalScrollIndicator={false}>
+
+        {/* Search */}
+        <TextInput
+          style={[styles.input, { backgroundColor: th.card, borderColor: th.border, color: th.text, marginBottom:8 }]}
+          placeholder={t.searchPh} placeholderTextColor="#aaa"
+          value={search} onChangeText={setSearch}/>
+
+        {/* Filter */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom:10 }}>
+          {['All','Pending','Complete','Re-opened'].map(f => (
+            <TouchableOpacity key={f} style={[styles.chip, filter===f && styles.chipActive, { marginRight:8 }]}
+              onPress={() => setFilter(f)}>
+              <Text style={[styles.chipText, filter===f && { color:'#fff' }]}>{f}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Count */}
+        <Text style={{ color: th.sub, fontSize:12, marginBottom:10, textAlign:'center', fontWeight:'600' }}>
+          {filtered.length} / {savedReports.length} {t.allReports}
+        </Text>
+
+        {filtered.length === 0 && (
+          <View style={[styles.card, { backgroundColor: th.card, alignItems:'center', padding:40 }]}>
+            <Text style={{ fontSize:48 }}>📁</Text>
+            <Text style={{ color: th.sub, marginTop:12, fontSize:14, textAlign:'center' }}>
+              {savedReports.length === 0 ? t.noSavedReports : t.noComplaints}
+            </Text>
+          </View>
+        )}
+
+        {[...filtered].reverse().map((rep, idx) => {
+          const sc = statusColors[rep.status] || statusColors['Pending'];
+          const statusLabel = rep.status === 'Complete' ? t.completeLabel : rep.status === 'Re-opened' ? t.reopenLabel : t.pendingLabel;
+          return (
+            <View key={rep.id + '_' + (rep.savedAt || idx)}
+              style={[styles.card, { backgroundColor: th.card, marginBottom:10 }]}>
+              {/* Top row */}
+              <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                <Text style={{ fontWeight:'800', fontSize:15, color: th.accent }}>#{rep.id} — {rep.vehicleNo}</Text>
+                <View style={[styles.badge, { backgroundColor: sc.bg }]}>
+                  <Text style={{ fontSize:10, fontWeight:'700', color: sc.text }}>{statusLabel}</Text>
+                </View>
+              </View>
+              {/* Details */}
+              <Text style={{ fontSize:13, color: th.text, fontWeight:'600' }}>👤 {rep.ownerName}</Text>
+              <Text style={{ fontSize:12, color: th.sub, marginTop:2 }}>🚘 {rep.vehicleType}</Text>
+              {rep.inspector && <Text style={{ fontSize:12, color: th.sub, marginTop:1 }}>🔍 {rep.inspector}</Text>}
+              {rep.supervisor && <Text style={{ fontSize:12, color: th.sub, marginTop:1 }}>👷 {rep.supervisor}</Text>}
+              {rep.technician && <Text style={{ fontSize:12, color: th.sub, marginTop:1 }}>🔧 {rep.technician}</Text>}
+              <Text style={{ fontSize:11, color: th.sub, marginTop:3 }}>🕐 {rep.datetime}</Text>
+              <Text style={{ fontSize:12, color: th.text, marginTop:4 }} numberOfLines={2}>📝 {rep.problem}</Text>
+              {/* Action buttons */}
+              <View style={{ flexDirection:'row', gap:8, marginTop:10 }}>
+                <TouchableOpacity
+                  style={[styles.smallBtn, { backgroundColor: th.blue, flex:1 }]}
+                  onPress={() => onViewReport(rep)}>
+                  <Text style={styles.smallBtnText}>👁️ {t.viewReport}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.smallBtn, { backgroundColor: th.accent, flex:1 }]}
+                  onPress={() => confirmDelete(rep)}>
+                  <Text style={styles.smallBtnText}>🗑️ {t.delete}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })}
         <View style={{ height:30 }}/>
       </ScrollView>
     </SafeAreaView>
@@ -1089,14 +1503,18 @@ function buildHTML(record, user) {
 // ROOT APP
 // ══════════════════════════════════════════════════════════════════════════════
 export default function App() {
-  const [user,       setUser]       = useState(null);
-  const [record,     setRecord]     = useState(null);
-  const [complaints, setComplaints] = useState([]);
-  const [settings,   setSettings]   = useState(DEFAULT_SETTINGS);
+  const [user,         setUser]         = useState(null);
+  const [record,       setRecord]       = useState(null);
+  const [complaints,   setComplaints]   = useState([]);
+  const [settings,     setSettings]     = useState(DEFAULT_SETTINGS);
+  const [savedReports, setSavedReports] = useState([]);
+  const [screen,       setScreen]       = useState('main'); // 'main' | 'savedReports' | 'viewSavedReport'
+  const [viewingReport, setViewingReport] = useState(null);
 
   useEffect(() => {
     loadComplaints().then(setComplaints);
     loadSettings().then(setSettings);
+    loadSavedReports().then(setSavedReports);
   }, []);
 
   async function handleSettingsChange(newSettings) {
@@ -1108,6 +1526,24 @@ export default function App() {
     const updated = await saveComplaints([...complaints, newRecord]);
     setComplaints(updated);
     setRecord(newRecord);
+  }
+
+  async function handleSaveReport(rec, usr) {
+    const entry = { ...rec, savedAt: new Date().toISOString(), savedBy: usr.name, savedByRole: usr.role };
+    const updated = await saveSavedReports([...savedReports, entry]);
+    setSavedReports(updated);
+    return updated.length;
+  }
+
+  async function handleDeleteSavedReport(id) {
+    // Remove first occurrence of this report id
+    let removed = false;
+    const updated = savedReports.filter(r => {
+      if (!removed && r.id === id) { removed = true; return false; }
+      return true;
+    });
+    const final = await saveSavedReports(updated);
+    setSavedReports(final);
   }
 
   async function handleComplaintAction(id, action) {
@@ -1133,6 +1569,7 @@ export default function App() {
       user={user} onLogout={() => setUser(null)}
       complaints={complaints} onComplaintAction={handleComplaintAction}
       settings={settings} onSettingsChange={handleSettingsChange}
+      savedReports={savedReports} onDeleteSavedReport={handleDeleteSavedReport}
     />;
   }
 
@@ -1144,16 +1581,38 @@ export default function App() {
     />;
   }
 
+  // Saved Reports screen (all roles)
+  if (screen === 'savedReports') return <SavedReportsScreen
+    user={user} savedReports={savedReports} settings={settings}
+    onBack={() => setScreen('main')}
+    onDeleteReport={handleDeleteSavedReport}
+    onViewReport={(rep) => { setViewingReport(rep); setScreen('viewSavedReport'); }}
+  />;
+
+  if (screen === 'viewSavedReport' && viewingReport) return <ReportScreen
+    user={user} record={viewingReport} settings={settings}
+    onBack={() => { setViewingReport(null); setScreen('savedReports'); }}
+    onNew={() => { setViewingReport(null); setScreen('main'); setRecord(null); }}
+    onSaveReport={null}
+    savedReports={savedReports}
+    isViewMode={true}
+  />;
+
   // Inspector flow
   if (record) return <ReportScreen
     user={user} record={record} settings={settings}
     onBack={() => setRecord(null)} onNew={() => setRecord(null)}
+    onSaveReport={handleSaveReport}
+    savedReports={savedReports}
+    onOpenSavedReports={() => setScreen('savedReports')}
   />;
 
   return <InspectionScreen
     user={user} onLogout={() => setUser(null)}
     onReport={handleReport} complaints={complaints}
     settings={settings}
+    onOpenSavedReports={() => setScreen('savedReports')}
+    savedReportsCount={savedReports.length}
   />;
 }
 
